@@ -1,0 +1,10 @@
+# Python bytecode and environments
+__pycache__/
+*.py[cod]
+.venv/
+
+# Local runtime logs
+*.log
+
+# Downloaded model weights
+models/fastino-gliner2-privacy-filter-PII-multi/model.safetensors

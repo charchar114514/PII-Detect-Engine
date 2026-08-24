@@ -1,0 +1,8 @@
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.34,<1.0
+presidio-analyzer>=2.2,<3.0
+# Local model runtime for fastino/gliner2-privacy-filter-PII-multi.
+gliner2>=1.0,<2.0
+huggingface-hub>=1.0,<2.0
+transformers>=5.8,<6.0
+protobuf>=5.0,<8.0
