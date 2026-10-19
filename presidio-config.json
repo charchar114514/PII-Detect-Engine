@@ -1,0 +1,6 @@
+{
+  "models": {
+    "en": "en_core_web_lg",
+    "zh": "zh_core_web_sm"
+  }
+}

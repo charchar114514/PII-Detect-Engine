@@ -8,6 +8,8 @@ and a local GLiNER2 model.
 ```text
 app.py                      HTTP routes and application lifecycle
 config.json                 Engine enable/disable switches
+presidio-config.json        English/Chinese spaCy model configuration
+install_presidio_models.py Explicit online installation of configured spaCy models
 pii_engine/
   config.py                 Configuration validation and project paths
   schemas.py                Shared request, response, and entity models
@@ -20,6 +22,7 @@ tests/
   test_engine_config.py     Configuration and API regression tests
   test_detection.py         Detection and result-merging regression tests
   test_rules.py             Identity-document patterns and false-positive tests
+  test_chinese.py           Bilingual Presidio and Unicode integration tests
 ```
 
 修改正则请编辑 `pii_engine/engines/rules.py`；Presidio 类型映射与调用逻辑位于
@@ -114,8 +117,57 @@ If all engines are disabled, detection returns no entities and the gateway treat
 the request as having no detected PII.
 
 Existing environment variables `GLINER_MODEL_PATH`, `GLINER_THRESHOLD` (default
-`0.65`), and `OFFLINE_MODE` are unchanged. The offline flag does not enforce all
-network restrictions; enabling Presidio may trigger language-model downloads.
+`0.65`), and `OFFLINE_MODE` are unchanged. Presidio checks installed spaCy model
+packages before initialization and does not download missing models at startup.
+The offline flag is informational and does not itself enforce network isolation.
+
+## 中文支持 / Chinese support
+
+`presidio-config.json` selects locally installed spaCy models:
+
+```json
+{
+  "models": {
+    "en": "en_core_web_lg",
+    "zh": "zh_core_web_sm"
+  }
+}
+```
+
+One-time online setup (after installing `requirements.txt`):
+
+```powershell
+.\.venv\Scripts\python.exe .\install_presidio_models.py
+```
+
+中文姓名、地点、日期等由中文 NLP 模型负责；这不是专门的中国 PII 模型，
+完整门牌地址和繁体、中英混合文本效果需按业务评测。
+为 `zh` 额外注册邮箱、电话、支付卡、IBAN、IP、MAC、URL、加密货币识别器，
+并添加简繁中文上下文。中国身份证、普通护照继续使用独立正则，不重复注册。
+
+Only installed language models are enabled. Missing models generate a warning;
+`GET /health` exposes `presidio_languages` with the languages actually loaded.
+`presidio=true` alone does not mean Chinese is available. If a requested language
+is missing, Presidio logs an error and returns no findings for that layer; enabled
+rules/GLiNER2 continue running. Invalid Presidio configuration fails startup.
+
+The C# gateway's `PiiDetector:Language` setting accepts `auto` (default), `en`, or
+`zh`. Auto selects Chinese when any Han character is present, including Traditional
+Chinese and supplementary Han; otherwise it selects English. This is a routing
+heuristic, not full language identification. Each request/response message is routed
+separately. Other Han-using languages can be misclassified; override when needed.
+
+Python returns Unicode code-point offsets. The gateway converts them to UTF-16
+offsets before extracting values or tokenizing, so emoji and supplementary Han do
+not shift redaction boundaries. Out-of-range spans reject the detection response.
+
+配置修改后需重启相应服务。关闭 `presidio` 仍不会导入或加载 NLP 模型。
+If real spaCy models are missing, bilingual integration tests are skipped explicitly;
+configuration and other detector tests still run. Gateway regression tests:
+
+```powershell
+dotnet run --project ..\ai-bridge\AiBridge.RegressionTests -p:NuGetAudit=false
+```
 
 ## Run
 

@@ -29,7 +29,10 @@ app = FastAPI(title="PII Detect Engine", version="0.1.0", lifespan=lifespan)
 
 @app.get("/health")
 def health() -> dict[str, object]:
-    return {"status": "ok", **detector.engine_status(), "configured": detector.config.model_dump()}
+    return {
+        "status": "ok", **detector.engine_status(), "configured": detector.config.model_dump(),
+        "presidio_languages": detector.presidio.languages if detector.presidio else [],
+    }
 
 
 @app.post("/analyze", response_model=AnalyzeResponse)
