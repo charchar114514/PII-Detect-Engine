@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="PII-Detect-Engine 中文项目介绍：架构、模块、配置、三层检测、接口、双语支持、网关集成、测试与限制。">
+<title>PII-Detect-Engine · 项目介绍与代码分析</title>
+<style>
+:root{color-scheme:light;--ink:#18343f;--accent:#087c79;--line:#d9e5e9}*{box-sizing:border-box}body{margin:0;background:#f4f7f8;color:var(--ink);font:16px/1.8 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}main{max-width:1120px;margin:auto;padding:40px 26px 64px}header{border-top:5px solid var(--accent);padding:26px 0}h1{font-size:clamp(30px,5vw,46px);line-height:1.2;margin:12px 0}h2{font-size:25px;margin:0 0 18px}h3{font-size:19px}.eyebrow{font-size:12px;letter-spacing:2px;color:var(--accent);font-weight:700}.lead{font-size:20px}.muted,footer{color:#566c78}a{color:#076f75;text-underline-offset:4px}nav{display:flex;flex-wrap:wrap;gap:9px 20px;border-block:1px solid var(--line);padding:16px 0;font-size:14px}section{padding-top:36px;scroll-margin-top:20px}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.card,.flow{background:white;border:1px solid var(--line);border-radius:10px;padding:22px}.card b{display:block;font-size:25px;color:var(--accent)}.card p{font-size:14px}.note{padding:16px 22px;background:#eaf5f2;border-left:4px solid var(--accent);margin:20px 0}.table-wrap{overflow-x:auto;background:white;border:1px solid var(--line);border-radius:9px;margin:16px 0}table{width:100%;border-collapse:collapse;text-align:left;font-size:14px}th,td{padding:12px 15px;border-bottom:1px solid var(--line);vertical-align:top}th{background:#eaf1f4}tr:last-child td{border-bottom:0}code{font:.9em/1.65 Consolas,monospace;overflow-wrap:anywhere;background:#eaf0f2;padding:2px 4px}pre{overflow:auto;padding:22px;background:#18343f;color:#e8f2f4;border-radius:9px;font-size:14px}pre code{background:none;padding:0;overflow-wrap:normal}.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch}.step{flex:1;min-width:120px;background:#eaf5f2;padding:15px 10px;border-radius:7px;text-align:center;font-weight:600}.arrow{align-self:center;color:var(--accent)}li{margin:8px 0}footer{border-top:1px solid var(--line);margin-top:36px;padding-top:18px;font-size:13px}@media(max-width:720px){main{padding:24px 15px}.cards{grid-template-columns:1fr}.step{flex-basis:100%}.arrow{width:100%;text-align:center;transform:rotate(90deg)}}@media print{body{background:white;font-size:10.5pt}main{padding:0;max-width:none}nav,.language{display:none}section{padding-top:22px}h2,h3{break-after:avoid}tr,.note,.card{break-inside:avoid}thead{display:table-header-group}.table-wrap{overflow:visible}pre{white-space:pre-wrap;background:#eef3f4;color:#18343f;font-size:9pt}a{color:inherit;text-decoration:none}th,td{padding:8px}}
+</style>
+</head>
+<body><main>
+<header><div class="eyebrow">AIGATEWAY · ENGINE DOCUMENTATION · 2026-10-19</div><h1>PII-Detect-Engine<br>项目介绍与代码分析</h1><p class="lead">面向 AiGateway 的本地敏感信息检测服务，以正则、Presidio 和 GLiNER2 三层检测输出统一实体结果。</p><p class="muted">依据当前本地代码整理。注册状态与测试结果引用本会话已有验证；本文不是实时健康检查，也不是生产准确率报告。</p><p class="language"><a href="project-introduction-en.html">English version →</a></p></header>
+<nav aria-label="文档目录"><a href="#overview">项目定位</a><a href="#architecture">架构与目录</a><a href="#workflow">工作流</a><a href="#rules">正则</a><a href="#presidio">Presidio</a><a href="#gliner">GLiNER2</a><a href="#api">接口与合并</a><a href="#config">配置与部署</a><a href="#gateway">网关集成</a><a href="#tests">测试</a><a href="#limits">限制与演进</a></nav>
+
+<section id="overview"><h2>01 / 项目定位与职责</h2><p>PII-Detect-Engine 是独立的 Python HTTP 服务，识别输入中的个人信息、证件、账户及秘密凭据。返回结果包括类型、原文起止位置、分数和检测来源，供上层网关决定是否允许外发以及如何替换敏感内容。</p><div class="cards"><div class="card"><b>3 层检测</b><p>正则、Presidio、GLiNER2 可以独立启停。</p></div><div class="card"><b>en + zh</b><p>Presidio 接入英文与中文 spaCy 模型。</p></div><div class="card"><b>FastAPI :8000</b><p>提供分析和健康检查接口。</p></div></div><div class="note"><strong>职责边界：</strong>Python 服务负责检测，不实现脱敏、策略拦截、Token Vault、外部业务模型调用或数据库审计。这些能力由相邻的 C# 网关实现。项目没有模型训练或微调流程。</div></section>
+
+<section id="architecture"><h2>02 / 架构与目录结构</h2><div class="flow" role="group" aria-label="服务架构"><div class="step">调用方 / C# 网关</div><span class="arrow" aria-hidden="true">→</span><div class="step">FastAPI<br>app.py</div><span class="arrow" aria-hidden="true">→</span><div class="step">Detector<br>编排与合并</div><span class="arrow" aria-hidden="true">→</span><div class="step">Rules / Presidio / GLiNER2</div></div><pre><code>PII-Detect-Engine/
+├─ app.py                         HTTP 入口与应用生命周期
+├─ config.json                    引擎启停开关
+├─ presidio-config.json           中英文 NLP 模型配置
+├─ pii_engine/
+│  ├─ config.py                   配置校验、路径、离线标记
+│  ├─ schemas.py                  请求、响应、实体结构
+│  ├─ detector.py                 检测编排、去重、排序
+│  └─ engines/
+│     ├─ rules.py                 正则、上下文、结构校验
+│     ├─ presidio.py              双语 NLP 与识别器适配
+│     └─ gliner.py                本地模型、标签及实体提取
+├─ models/fastino-gliner2-privacy-filter-PII-multi/
+│  ├─ model.safetensors           模型权重
+│  ├─ config.json                 提取器配置
+│  ├─ tokenizer.json              分词器
+│  ├─ tokenizer_config.json       分词器配置
+│  └─ encoder_config/config.json  编码器配置
+├─ download_model.py              显式下载 GLiNER2 权重
+├─ install_presidio_models.py     显式安装 spaCy 模型
+├─ start.ps1                      环境准备与启动
+├─ requirements.txt               依赖版本范围
+├─ tests/                         四组回归与集成测试
+└─ doc/                           项目介绍和标签参考</code></pre><p>三个检测器均采用 <code>analyze(AnalyzeRequest) → list[Entity]</code> 的调用形态，具有 <code>available</code> 状态。配置、数据结构、编排、引擎和 HTTP 接口分别维护，避免把检测细节混入入口文件。</p><p>源码入口：<a href="../app.py">app.py</a> · <a href="../pii_engine/detector.py">detector.py</a> · <a href="../pii_engine/schemas.py">schemas.py</a>。</p></section>
+
+<section id="workflow"><h2>03 / 启动与请求工作流</h2><p>FastAPI 的 lifespan 在启动时执行 <code>Detector(load_config())</code>。配置文件校验通过后，只创建已启用的引擎，模型实例在进程内复用；关闭 Presidio / GLiNER2 时，不导入相应第三方包或加载权重。</p><div class="flow" role="group" aria-label="请求处理顺序"><div class="step">校验请求</div><span class="arrow" aria-hidden="true">→</span><div class="step">正则</div><span class="arrow" aria-hidden="true">→</span><div class="step">Presidio</div><span class="arrow" aria-hidden="true">→</span><div class="step">GLiNER2</div><span class="arrow" aria-hidden="true">→</span><div class="step">合并并返回</div></div><pre><code>for engine in (self.rules, self.presidio, self.gliner):
+    if engine is not None:
+        found.extend(engine.analyze(request))</code></pre><ul><li><strong>同一文本的三个组件串行执行</strong>，每层都接收相同原文，不会先脱敏再传给下一层。</li><li>前一层命中不触发提前结束；关闭的组件跳过。</li><li><code>include_ner=false</code> 仅跳过单次 GLiNER2 推理，不影响 Presidio，也不卸载已加载权重。</li><li>不同 HTTP 请求可能由 FastAPI 线程池调度；目前没有自定义推理并发上限、模型锁或任务队列。C# 同时提交多条消息属于另一层并发。</li><li>没有批量分析接口、流式实体输出或显式长文本分块。所有结果汇总后一次返回。</li></ul></section>
+
+<section id="rules"><h2>04 / 正则引擎：规则与结构校验</h2><p><a href="../pii_engine/engines/rules.py">rules.py</a> 当前包含 12 条模式、8 个输出类型。每条模式由类型、编译后的表达式和固定分数组成；分数是人工经验值，不代表统计准确率。</p><div class="table-wrap"><table><thead><tr><th scope="col">类型</th><th scope="col">覆盖与限制</th></tr></thead><tbody>
+<tr><td><code>email</code></td><td>邮箱格式。</td></tr><tr><td><code>phone</code></td><td>通用分隔式电话及中国大陆连续手机号，可带 86 / +86 前缀。</td></tr><tr><td><code>credit_card</code></td><td>13～19 位数字候选，尚无 Luhn 校验。</td></tr><tr><td><code>ip_address</code></td><td>IPv4 候选，尚未校验每段的 0～255 范围。</td></tr><tr><td><code>credential</code></td><td>密码、API key、secret、private key 等赋值文本；匹配范围包含字段名及其值。</td></tr><tr><td><code>us_ssn</code></td><td>连字符或空格形式；纯数字形式要求 SSN 上下文。排除无效开头、00 组号和 0000 序列号。</td></tr><tr><td><code>identity_number</code></td><td>18 位中国身份证：省级前缀、非零地区后缀、真实且非未来生日、非零顺序码、MOD 11-2 校验位，支持 X/x；旧版 15 位须带身份证上下文，生日按 19xx 年解析，无校验位。</td></tr><tr><td><code>passport</code></td><td>中国普通护照 G/E + 8 位数字、E + 字母 + 7 位数字；其他 6～9 位字母数字候选要求护照上下文且至少一个数字。</td></tr>
+</tbody></table></div><p><code>contextual_pattern()</code> 使用名为 <code>value</code> 的捕获组，令返回位置只包含号码，排除“护照号”等提示词及 JSON 引号。普通护照独立模式第二位字母排除 I/O；通用上下文模式并不是某个国家的严格护照验证。</p><p>同类型同跨度保留最高分；已识别的身份证、SSN、护照优先于与其重叠的宽泛电话和银行卡结果。身份证未核验完整历史县级区划码，格式和校验位通过不证明证件已真实签发。</p></section>
+
+<section id="presidio"><h2>05 / Presidio：双语 NLP 与识别器</h2><p><a href="../pii_engine/engines/presidio.py">presidio.py</a> 将识别器框架接入统一实体结构。初始化时读取 <a href="../presidio-config.json">presidio-config.json</a>，通过 <code>spacy.util.is_package()</code> 检查已安装的模型包；缺失模型会告警并禁用该语言，启动时不自动下载。</p><ul><li>当前模型为英文 <code>en_core_web_lg</code> 和中文 <code>zh_core_web_sm</code>。</li><li>保留既有 NLP 标签映射，忽略 ORGANIZATION 及其他排除标签。姓名和地点不等同于专门的中国 PII 模型能力，完整门牌地址需另外评测。</li><li>在 zh 下注册邮箱、电话、支付卡、IBAN、IP、MAC、URL、加密货币识别器，并设置简繁中文上下文；电话区域为 CN / HK / TW。</li><li>调用 <code>analyzer.analyze(text, language)</code>，未传类型白名单或自定义分数阈值，采用当前语言全部已注册类型及引擎默认行为。</li><li><code>PRESIDIO_TYPE_MAP</code> 只转换输出名称，如 EMAIL_ADDRESS → email、US_SSN → us_ssn；未映射名称转小写。LOCATION 目前映射为 address，不能据此假定完整地址已被覆盖。</li><li>初始化异常被记录并令此引擎不可用；检测异常被记录后返回已收集结果，通常为空。单次接口响应没有明确标注这一层是失败还是未检出。</li></ul><p>此前实际注册表核对为英文 19 类、中文 13 类，注册状态不等于准确率。模型文件值按已安装包名使用，当前预检查不支持任意本地模型目录。类型明细见 <a href="presidio-labels.html">Presidio 标签参考</a>。</p></section>
+
+<section id="gliner"><h2>06 / GLiNER2：本地标签驱动的实体提取</h2><p><a href="../pii_engine/engines/gliner.py">gliner.py</a> 使用 <code>fastino/gliner2-privacy-filter-PII-multi</code>，将文本和 <code>ENTITY_LABELS</code> 一起输入模型，通过上下文预测实体片段。</p><pre><code>result = self.model.extract_entities(
+    request.text, ENTITY_LABELS, threshold=GLINER_THRESHOLD,
+    include_confidence=True, include_spans=True,
+)</code></pre><ul><li>当前配置 29 个标签，官方权重列出 42 个；标签列表仍写在代码中，没有逐标签配置文件。</li><li>依赖缺失或模型目录不存在时，此层不可用；现有目录加载失败的异常会向外传播，可能使服务启动失败。</li><li>默认阈值 0.65；结果仅接受字典中的整数 start/end，分数依次读取 confidence、score，缺失则为 0.0。</li><li>适配层尚未校验跨度是否落在原文内；C# 网关另有范围检查。推理异常未捕获，会令请求失败。</li><li>本地配置指向 microsoft/mdeberta-v3-base，model_type 为 extractor、max_width 为 8。后者是内部跨度设置，不是接口允许的字符数。</li><li>权重约 1.23 GB，尚无系统内存、延迟或中文准确率评测。该权重的官方训练语言不含中文；中文 Presidio 测试不代表 GLiNER2 中文能力已验证。</li></ul><p><a href="gliner2-labels.html">GLiNER2 全部标签</a> · <a href="https://huggingface.co/fastino/gliner2-privacy-filter-PII-multi" target="_blank" rel="noopener noreferrer">权重模型卡</a>。</p></section>
+
+<section id="api"><h2>07 / HTTP 接口、实体结构与合并</h2><div class="table-wrap"><table><thead><tr><th scope="col">接口 / 字段</th><th scope="col">行为</th></tr></thead><tbody><tr><td><code>POST /analyze</code></td><td>接收 text、language、include_ner，返回 entities 和 engine。</td></tr><tr><td><code>GET /health</code></td><td>返回 status、配置开关、引擎可用状态及 presidio_languages；status=ok 不保证所有引擎可用。</td></tr><tr><td><code>text</code></td><td>1～50,000 个 Python 字符，不是模型 token 上限。</td></tr><tr><td><code>language</code></td><td>长度 2～8，默认 en；请求结构并非仅 en/zh 枚举，实际支持由模型决定。服务不自动选择语言。</td></tr><tr><td><code>include_ner</code></td><td>默认 true，仅控制 GLiNER2 单次推理。</td></tr></tbody></table></div><p>请求示例：</p><pre><code>{
+  "text": "邮箱 alice@example.com",
+  "language": "zh",
+  "include_ner": false
+}</code></pre><p>仅启用正则时的示意响应（默认三个引擎全开时，状态和结果可能不同）：</p><pre><code>{
+  "entities": [
+    {"type": "email", "start": 3, "end": 20, "score": 0.99, "source": "rule"}
+  ],
+  "engine": {"rules": true, "presidio": false, "gliner": false, "offline_mode": true}
+}</code></pre><p>实体 <code>start/end</code> 是 Python Unicode code-point 索引，左闭右开，可用 <code>text[start:end]</code> 提取。source 为 rule / presidio / gliner。正常响应不额外返回敏感原文值。</p><p>编排器以 <code>(type, start, end)</code> 去重，完全相同的类型与位置只保留最高分，再按 start/end 排序。不同类型或不同边界的重叠结果通常保留。phone 与 phone_number、credit_card 与 card_number 等未完全统一。</p><p>正则固定分数、Presidio 规则/上下文分数及 GLiNER2 模型分数没有统一校准；直接取最高分的意义有限。无效请求通常返回 HTTP 422，未捕获的推理异常导致请求失败。</p></section>
+
+<section id="config"><h2>08 / 配置与部署方式</h2><p>引擎开关 <a href="../config.json">config.json</a>：</p><pre><code>{"rules": true, "presidio": true, "gliner": true}</code></pre><p>模型配置 <a href="../presidio-config.json">presidio-config.json</a>：</p><pre><code>{"models": {"en": "en_core_web_lg", "zh": "zh_core_web_sm"}}</code></pre><ul><li>引擎开关必须全部提供且为 JSON 布尔值；未知字段、字符串布尔值或缺失字段校验失败。Presidio 配置只允许 en/zh 模型键，模型字典至少一项。</li><li>两份配置按项目路径定位，启动时读取，不支持热更新；Presidio 配置仅在该引擎启用时读取。</li><li><code>GLINER_MODEL_PATH</code> 默认指向项目 models 目录；环境变量覆盖为相对路径时按进程工作目录解析。</li><li><code>GLINER_THRESHOLD</code> 默认 0.65，导入时转为 float，尚无 0～1 范围校验。</li><li><code>OFFLINE_MODE</code> 默认 true，是报告标记，不会强制阻止网络访问。</li><li>全部关闭会返回空实体列表，网关将其视为未发现 PII；模型目录下的 config.json 与服务配置用途不同。</li></ul><pre><code># 在 PII-Detect-Engine 目录首次准备（需要联网）
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe install_presidio_models.py
+.\.venv\Scripts\python.exe download_model.py
+
+# 已准备好环境与模型后直接启动
+.\.venv\Scripts\python.exe -m uvicorn app:app --host 127.0.0.1 --port 8000</code></pre><p><a href="../start.ps1">start.ps1</a> 是便利启动脚本，会创建环境、升级 pip、安装全部依赖并启动服务，因此包含联网步骤。<a href="../install_presidio_models.py">install_presidio_models.py</a> 显式安装缺失 spaCy 包，<a href="../download_model.py">download_model.py</a> 从 Hugging Face 显式下载 GLiNER2 快照。已完成准备时可直接使用 Uvicorn 启动本地推理。</p><p>主要依赖为 FastAPI、Uvicorn、Presidio、GLiNER2、Transformers、Hugging Face Hub、Protobuf；范围见 <a href="../requirements.txt">requirements.txt</a>。当前未使用完整锁文件或固定 Hub revision，跨环境复现仍需版本管理。</p></section>
+
+<section id="gateway"><h2>09 / 与 C# 网关的协作</h2><div class="flow" role="group" aria-label="网关集成"><div class="step">网关选择语言</div><span class="arrow" aria-hidden="true">→</span><div class="step">Python 检测</div><span class="arrow" aria-hidden="true">→</span><div class="step">转换 UTF-16 索引</div><span class="arrow" aria-hidden="true">→</span><div class="step">策略、脱敏、外部调用</div></div><p>相邻项目的 <a href="../../ai-bridge/AiBridge.Api/PiiText.cs">PiiText.cs</a> 支持 auto / en / zh；auto 有汉字选择 zh，否则 en，不是完整语言识别。网关对每条消息调用服务，并通过 Task.WhenAll 实现消息级并发。Python 请求语言只影响 Presidio，其他检测器仍接收原文。</p><p><a href="../../ai-bridge/AiBridge.Api/Security.cs">Security.cs</a> 把 Python code-point 索引转换成 C# UTF-16 索引，再提取和替换，防止 emoji、生僻字导致脱敏错位；无效范围会拒绝检测响应。网关随后处理重叠实体、风险等级、allow/redact/block、Token 映射、还原和审计。</p><p>外部模型回复返回后会再检测；当前新生成 PII 仅记录 response_flagged，不会据此再次脱敏或拦截。Python 服务本身不保存这些业务状态。</p></section>
+
+<section id="tests"><h2>10 / 测试与验证范围</h2><div class="table-wrap"><table><thead><tr><th scope="col">测试文件</th><th scope="col">方法数</th><th scope="col">覆盖</th></tr></thead><tbody><tr><td><a href="../tests/test_engine_config.py">test_engine_config.py</a></td><td>7</td><td>全部 8 种开关组合、配置校验、HTTP 行为、单次跳过 GLiNER2。</td></tr><tr><td><a href="../tests/test_detection.py">test_detection.py</a></td><td>5</td><td>匹配位置、最高分去重、Presidio 降级、GLiNER2 转换、SSN 类型一致性。</td></tr><tr><td><a href="../tests/test_rules.py">test_rules.py</a></td><td>13</td><td>身份证、SSN、护照、手机号、上下文、日期/校验位及误报边界。</td></tr><tr><td><a href="../tests/test_chinese.py">test_chinese.py</a></td><td>7</td><td>双语模型、中文上下文、Unicode 位置、健康检查、缺模型不下载。</td></tr></tbody></table></div><pre><code>.\.venv\Scripts\python.exe -m unittest discover -s tests -v</code></pre><p>共 32 个测试方法，此前实现验证全部通过；双语集成测试使用真实已安装 spaCy 模型，模型缺失时明确跳过。GLiNER2 测试使用替身，不加载真实权重。C# 回归测试另验证路由、Unicode、Token 替换还原及模拟 HTTP 检测下的网关流程。</p><p>本文档生成阶段重新检查源码和 HTML 结构，未重复运行模型测试。现有测试不构成生产准确率、压力性能或全链路真实 GLiNER2 验证。</p></section>
+
+<section id="limits"><h2>11 / 当前限制与演进方向</h2><div class="table-wrap"><table><thead><tr><th scope="col">领域</th><th scope="col">限制与建议</th></tr></thead><tbody><tr><td>失败语义</td><td>Presidio 降级可能与未检出表现一致，GLiNER2 则可能失败。建议增加逐请求引擎状态及必须成功的检测策略。</td></tr><tr><td>类型与分数</td><td>别名未完全统一、来源分数未校准。建议规范类型并按业务评测优先级及阈值。</td></tr><tr><td>并发</td><td>单文本内串行、跨消息并发、模型共享。先评测线程安全、延迟和吞吐，再引入有上限的并发或批处理。</td></tr><tr><td>中文质量</td><td>通用小型 NER 不保证完整地址或繁体姓名表现。需建立简体、繁体、中英混合评测集。</td></tr><tr><td>长度与校验</td><td>字符限制不同于模型窗口。需增加重叠分块、全局位置还原，以及 IP / 卡号等校验。</td></tr><tr><td>配置与运维</td><td>尚无逐类型启停和阈值配置；Python 未实现鉴权、限流、指标或持久化。按部署需要完善访问控制、观测和版本锁定。</td></tr></tbody></table></div><p>上述为后续建议，未在生成本文档时修改业务逻辑。进一步参考：<a href="gliner2-labels.html">GLiNER2 标签</a> · <a href="presidio-labels.html">Presidio 标签</a> · <a href="../README.md">README</a>。</p></section>
+<footer>代码快照：2026-10-19（Asia/Hong_Kong）。独立 HTML，样式内嵌，无外部脚本、字体或图片依赖，可离线阅读、打印为 PDF。</footer>
+</main></body></html>
